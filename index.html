@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="icon" href="data:,">
+<meta charset="utf-8">
+<title>Right whale vessel-strike simulator</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+@font-face{font-family:Inter;src:url('fonts/Inter.ttf');font-weight:100 900}
+:root{
+  --plane:#0a1218; --surface:#101a22; --ink:#f0efec; --ink2:#c3c2b7; --muted:#8d949a; --grid:#22303b;
+  --rule:#3987e5; --norule:#d95926; --lethal:#d03b3b; --survived:#fab219;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--plane);color:var(--ink);
+  font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+#app{display:grid;grid-template-columns:1fr 640px;height:100vh}
+#mapwrap{position:relative;min-width:0}
+#map{position:absolute;inset:0;width:100%;height:100%;display:block}
+#tiles{position:absolute;left:24px;top:22px;display:flex;gap:12px}
+.tile{background:rgba(10,18,24,.82);border:1px solid var(--grid);border-radius:12px;padding:10px 18px 12px;min-width:132px}
+.tile .k{font-size:15px;color:var(--ink2);letter-spacing:.02em}
+.tile .v{font-size:40px;font-weight:650;line-height:1.1;font-variant-numeric:tabular-nums}
+.tile .v small{font-size:17px;font-weight:500;color:var(--ink2);margin-left:6px}
+.dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:7px;vertical-align:1px}
+#legend{position:absolute;right:20px;top:24px;background:rgba(10,18,24,.82);border:1px solid var(--grid);
+  border-radius:12px;padding:10px 16px;font-size:15px;color:var(--ink2);line-height:1.75}
+#legend i{display:inline-block;width:18px;height:8px;border-radius:3px;margin-right:8px;vertical-align:1px}
+#legend .ring{width:13px;height:13px;border-radius:50%;background:none;border:3px solid;vertical-align:-2px;margin-right:10px;margin-left:2px}
+#panel{background:var(--surface);border-left:1px solid var(--grid);padding:18px 30px 12px;display:flex;flex-direction:column;gap:10px;overflow:hidden}
+h1{font-size:27px;margin:0;font-weight:680;letter-spacing:-.01em}
+.sub{font-size:15px;color:var(--ink2);margin-top:3px}
+.ctl{display:grid;grid-template-columns:1fr auto;row-gap:2px;align-items:baseline}
+.ctl label{font-size:17px;color:var(--ink2)}
+.ctl output{font-size:20px;font-weight:650;font-variant-numeric:tabular-nums}
+.ctl input{grid-column:1/3;width:100%;margin:5px 0 0}
+input[type=range]{-webkit-appearance:none;appearance:none;height:22px;background:none;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:#2b3c49}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--ink);margin-top:-8px;border:3px solid var(--surface);box-shadow:0 0 0 2px var(--rule)}
+input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:#2b3c49}
+input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--ink);border:2px solid var(--rule)}
+#hero{border:1px solid var(--grid);border-radius:14px;padding:12px 18px;display:grid;grid-template-columns:auto 1fr;column-gap:20px;align-items:center}
+#heroNum{font-size:60px;font-weight:700;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums}
+#hero .t{font-size:17px;color:var(--ink)}
+#hero .d{font-size:15px;color:var(--ink2);margin-top:4px;font-variant-numeric:tabular-nums}
+.card{border:1px solid var(--grid);border-radius:14px;padding:10px 14px 6px}
+.card h2{font-size:16px;margin:0 0 2px;font-weight:620;display:flex;justify-content:space-between;align-items:center}
+.card h2 span{font-weight:400;color:var(--muted);font-size:14px}
+svg text{font-family:inherit;fill:var(--muted);font-size:13px}
+svg .ink{fill:var(--ink2)}
+#curveNote{color:var(--ink2);font-variant-numeric:tabular-nums}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.seg button{background:#16232d;border:1.5px solid var(--grid);color:var(--ink2);font-size:16px;padding:6px 10px 7px;line-height:1.25}
+.seg button small{display:block;font-size:12.5px;font-weight:400;color:var(--muted)}
+.seg button.on{background:rgba(57,135,229,.2);border-color:var(--rule);color:var(--ink)}
+.seg button.on small{color:var(--ink2)}
+@media (max-width:1100px){
+  html,body{overflow:auto;height:auto} #app{grid-template-columns:1fr;height:auto}
+  #mapwrap{height:62vh} #legend{display:none} #panel{border-left:0;overflow:visible}
+  #tiles{left:10px;top:10px;gap:6px} .tile{min-width:0;padding:6px 10px} .tile .v{font-size:26px} .tile .k{font-size:12px}
+  h1{font-size:22px} #heroNum{font-size:44px}
+}
+button{font:inherit;font-size:16px;font-weight:620;color:#fff;background:var(--rule);border:0;border-radius:9px;padding:8px 16px;cursor:pointer}
+button:hover{filter:brightness(1.1)} button.down{transform:scale(.96);filter:brightness(.85)}
+.lg{font-size:14.5px;color:var(--ink2);display:flex;gap:18px;margin:4px 0 0;font-variant-numeric:tabular-nums}
+.lg i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+#foot{font-size:12.5px;color:var(--muted);line-height:1.4;margin-top:auto}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="mapwrap">
+    <canvas id="map"></canvas>
+    <div id="tiles">
+      <div class="tile"><div class="k">Transits</div><div class="v" id="tTrans">0</div></div>
+      <div class="tile"><div class="k">Strikes</div><div class="v" id="tStrikes">0</div></div>
+      <div class="tile"><div class="k"><span class="dot" style="background:var(--lethal)"></span>Lethal</div><div class="v"><span id="tLethal">0</span><small id="tShare"></small></div></div>
+    </div>
+    <div id="legend">
+      <div><i style="background:#e8e6df"></i>Vessel at its own speed (two sizes)</div>
+      <div><i style="background:#6da7ec"></i>Slowed to the limit</div>
+      <div><i style="background:#ec835a"></i>Over the limit in the zone</div>
+      <div><i class="ring" style="border-color:var(--lethal)"></i>Lethal strike (skull)</div>
+      <div><i class="ring" style="border-color:var(--survived)"></i>Whale survives</div>
+    </div>
+  </div>
+  <aside id="panel">
+    <div>
+      <h1>Right whale vessel-strike simulator</h1>
+      <div class="sub">How do speed rules and compliance change the risk of a lethal strike?</div>
+    </div>
+    <div class="ctl"><label for="limit">Speed limit in the zone</label><output id="oLimit"></output>
+      <input type="range" id="limit" min="8" max="18" step="1" value="18"></div>
+    <div class="ctl"><label for="comp">Vessels that comply</label><output id="oComp"></output>
+      <input type="range" id="comp" min="0" max="100" step="1" value="50"></div>
+    <div class="ctl"><label for="traffic">Vessel transits per day</label><output id="oTraffic"></output>
+      <input type="range" id="traffic" min="10" max="120" step="5" value="60"></div>
+    <div class="ctl"><label for="whales">Right whales in the zone</label><output id="oWhales"></output>
+      <input type="range" id="whales" min="2" max="30" step="1" value="14"></div>
+
+    <div class="seg" id="model">
+      <button data-m="0" class="on">Speed only<small>Vanderlaan &amp; Taggart 2007</small></button>
+      <button data-m="1">Speed + vessel mass<small>Kelley et al. 2021</small></button>
+    </div>
+
+    <div id="hero">
+      <div id="heroNum">0%</div>
+      <div><div class="t">change in lethal-strike risk vs. no speed rule</div>
+        <div class="d" id="heroDetail"></div></div>
+    </div>
+
+    <div class="card">
+      <h2>Chance a strike is lethal, by vessel speed <span id="curveNote"></span></h2>
+      <svg id="curve" viewBox="0 0 580 192" width="100%"></svg>
+    </div>
+
+    <div class="card">
+      <h2>Lethal strikes per season <button id="mcBtn">Run 1,000 seasons</button></h2>
+      <div class="lg"><span><i style="background:var(--norule)"></i>No speed rule <b id="mA"></b></span>
+        <span><i style="background:var(--rule)"></i>Current settings <b id="mB"></b></span></div>
+      <svg id="mc" viewBox="0 0 580 186" width="100%"></svg>
+    </div>
+
+    <div id="foot">Illustrative model, not a management tool. Encounter rates are exaggerated and uncalibrated so that strikes are visible; struck whales are replaced to hold density constant. Lethality: Vanderlaan &amp; Taggart (2007), logit P = −4.89 + 0.41 × speed (kt); or the four-layer biophysical model of Kelley et al. (2021) for a 13.7 m right whale struck mid-body, with 30% of traffic as 45 t vessels.</div>
+  </aside>
+</div>
+
+<script>
+// ---------- model ----------
+// Four-layer whale-strike model of Kelley, Vlasic & Brillant (2021), ported from the authors' R package "whalestrike".
+// Returns the maximum compression stress (Pa) on a 13.7 m right whale struck mid-body.
+const KELLEY = (() => {
+  const l = [0.025, 0.16, 1.12, 0.1], a = [17.8e6 / 0.1, 1.58e5, 1.58e5, 8.54e8 / 0.1], b = [0.1, 2.54, 2.54, 0.1];
+  const lsum = l.reduce((x, y) => x + y), theta = 55 * Math.PI / 180, RHO = 1024, Cs = 0.01, Cw = 0.0025;
+  const lw = 13.7, mw = Math.exp(-10.095 + 2.825 * Math.log(100 * lw)), Sw = 0.448 * (0.877 * lw) ** 2;
+  // stress as a function of whole-body strain: invert sum_i (l_i/b_i) ln(1 + s/a_i) = strain * lsum, capping each layer at full compression
+  const sMaxLayer = a.map((ai, i) => ai * (Math.exp(b[i]) - 1)), N = 2000, table = new Float64Array(N + 1);
+  const squeeze = s => l.reduce((acc, li, i) => acc + li * Math.min(1, Math.log(1 + s / a[i]) / b[i]), 0);
+  for (let k = 0; k <= N; k++){ const dl = k / N * lsum; let lo = 0, hi = 2 * Math.max(...sMaxLayer);
+    for (let it = 0; it < 80; it++){ const mid = (lo + hi) / 2; if (squeeze(mid) < dl) lo = mid; else hi = mid; } table[k] = (lo + hi) / 2; }
+  const stressAt = e => { const x = Math.min(1, Math.max(0, e)) * N, k = Math.min(N - 1, Math.floor(x)); return table[k] + (table[k + 1] - table[k]) * (x - k); };
+  function maxStress(knots, shipTonnes, Ly, Lz){
+    const ms = shipTonnes * 1000, Ss = 11.73 * (4.63 + 2 * 1.58) * Math.pow(ms / 20.46e3, 2 / 3), v0 = knots * 0.514444;
+    const thrust = 0.5 * RHO * Cs * Ss * v0 * v0, C = Math.cos(theta), T = Math.tan(theta);
+    const acc = (dx, vs, vw) => { const d = Math.max(0, dx), sig = stressAt(d / lsum);
+      const lam = d * T, Lam = d / C, ey = 2 * (Lam - lam) / (Ly + 2 * lam), ez = 2 * (Lam - lam) / (Lz + 2 * lam);
+      const F = sig * Ly * Lz + 2 * l[0] * (Lz * a[0] * (Math.exp(b[0] * ez) - 1) + Ly * a[0] * (Math.exp(b[0] * ey) - 1)) * C;
+      return [(thrust - 0.5 * RHO * Cs * Ss * vs * Math.abs(vs) - F) / ms, (F - 0.5 * RHO * Cw * Sw * vw * Math.abs(vw)) / mw]; };
+    let dx = 0, vs = v0, vw = 0, peak = 0; const dt = 2e-5;
+    for (let n = 0; n < 400000; n++){                     // RK4 on penetration, ship speed and whale speed
+      const k1 = acc(dx, vs, vw), d1 = vs - vw;
+      const k2 = acc(dx + d1 * dt / 2, vs + k1[0] * dt / 2, vw + k1[1] * dt / 2), d2 = vs + k1[0] * dt / 2 - vw - k1[1] * dt / 2;
+      const k3 = acc(dx + d2 * dt / 2, vs + k2[0] * dt / 2, vw + k2[1] * dt / 2), d3 = vs + k2[0] * dt / 2 - vw - k2[1] * dt / 2;
+      const k4 = acc(dx + d3 * dt, vs + k3[0] * dt, vw + k3[1] * dt), d4 = vs + k3[0] * dt - vw - k3[1] * dt;
+      dx += dt * (d1 + 2 * d2 + 2 * d3 + d4) / 6; vs += dt * (k1[0] + 2 * k2[0] + 2 * k3[0] + k4[0]) / 6; vw += dt * (k1[1] + 2 * k2[1] + 2 * k3[1] + k4[1]) / 6;
+      peak = Math.max(peak, stressAt(dx / lsum));
+      if (vs - vw <= 0 || dx >= lsum) break;              // ship and whale now moving together: penetration has peaked
+    }
+    return peak;
+  }
+  const pLethal = stress => stress <= 0 ? 0 : 1 / (1 + Math.exp(-(Math.log10(stress) - 5.38) / 0.349));
+  return { maxStress, pLethal };
+})();
+
+const B0 = -4.89, B1 = 0.41;                         // Vanderlaan & Taggart 2007: speed only
+const pVT = v => 1 / (1 + Math.exp(-(B0 + B1 * v)));
+// Kelley et al. 2021: lethality depends on speed and vessel mass. Two vessel classes, tabulated once at load.
+const CLASSES = [{ name: 'large vessel', tonnes: 30000, Ly: 1.24, Lz: 0.71 }, { name: 'small vessel (45 t)', tonnes: 45, Ly: 1.15, Lz: 1.15 }];
+const SMALL_SHARE = 0.3;
+const KTAB = CLASSES.map(c => { const t = []; for (let v = 0; v <= 26; v += 0.5) t.push(KELLEY.pLethal(KELLEY.maxStress(v, c.tonnes, c.Ly, c.Lz))); return t; });
+const pKelley = (v, k) => { const x = Math.max(0, Math.min(26, v)) * 2, i = Math.min(51, Math.floor(x)); return KTAB[k][i] + (KTAB[k][i + 1] - KTAB[k][i]) * (x - i); };
+const pLethal = (v, k) => S.model ? pKelley(v, k) : pVT(v);
+const pMix = v => S.model ? (1 - SMALL_SHARE) * pKelley(v, 0) + SMALL_SHARE * pKelley(v, 1) : pVT(v);
+const V_MEAN = 15.5, V_SD = 3, V_MIN = 8, V_MAX = 24; // unrestricted transit speeds (kt)
+const NO_LIMIT = 18;                                  // slider value meaning "no rule"
+const HOURS_PER_SEC = 0.5;                            // 1 s of animation = 30 simulated minutes
+const STRIKE_R = 0.6;                                 // nmi, exaggerated strike radius
+const DEAD_T = 3.2;                                   // seconds a killed whale stays on the map as a fading skull
+const WORLD_W = 60;                                   // nmi across the map
+
+// seeded RNG so every run of the film is identical
+let seed = 20260214;
+function rnd(){ seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+const randn = () => Math.sqrt(-2 * Math.log(1 - rnd())) * Math.cos(2 * Math.PI * rnd());
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const sampleV0 = () => clamp(V_MEAN + V_SD * randn(), V_MIN, V_MAX);
+function rpois(l){ const L = Math.exp(-l); let k = 0, p = 1; do { k++; p *= rnd(); } while (p > L); return k - 1; }
+
+const S = { limit: 18, comp: 50, traffic: 60, whales: 14, model: 0 };
+const zoneSpeed = (v0, compliant) => (S.limit < NO_LIMIT && compliant) ? Math.min(v0, S.limit) : v0;
+
+// expected P(lethal | strike) with and without the rule, by numerical integration
+function expectedLethality(){
+  let w = 0, eNo = 0, eRule = 0; const c = S.comp / 100;
+  for (let v = V_MIN; v <= V_MAX; v += 0.05){
+    const d = Math.exp(-0.5 * ((v - V_MEAN) / V_SD) ** 2); w += d;
+    eNo += d * pMix(v);
+    eRule += d * (S.limit < NO_LIMIT ? c * pMix(Math.min(v, S.limit)) + (1 - c) * pMix(v) : pMix(v));
+  }
+  return { eNo: eNo / w, eRule: eRule / w };
+}
+
+// ---------- world ----------
+const cv = document.getElementById('map'), ctx = cv.getContext('2d');
+let CW = 0, CH = 0, PX = 1, WORLD_H = 50, zone;
+function resize(){
+  const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  CW = r.width; CH = r.height; cv.width = CW * dpr; cv.height = CH * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  PX = CW / WORLD_W; WORLD_H = CH / PX;
+  zone = { x0: 13, x1: 47, y0: WORLD_H * 0.24, y1: WORLD_H * 0.86 };
+}
+const inZone = (x, y) => x > zone.x0 && x < zone.x1 && y > zone.y0 && y < zone.y1;
+
+let ships = [], whales = [], fx = [], strikes = [], spawnAcc = 0;
+let count = { transits: 0, strikes: 0, lethal: 0 };
+
+function spawnWhale(){
+  return { x: zone.x0 + 1.5 + rnd() * (zone.x1 - zone.x0 - 3), y: zone.y0 + 1.5 + rnd() * (zone.y1 - zone.y0 - 3),
+           h: rnd() * 6.283, safe: 0, blow: rnd() * 6, gone: 0 };
+}
+function spawnShip(){
+  const east = rnd() < 0.5, lane = WORLD_H * (east ? 0.47 : 0.63);
+  const y0 = lane + randn() * WORLD_H * 0.075, y1 = lane + randn() * WORLD_H * 0.075;
+  const x = east ? -2 : WORLD_W + 2, tx = east ? WORLD_W + 2 : -2;
+  const h = Math.atan2(y1 - y0, tx - x), v0 = sampleV0();
+  const k = rnd() < SMALL_SHARE ? 1 : 0;                 // vessel class: 0 large, 1 small
+  return { x, y: y0, h, v0, v: v0, k, compliant: rnd() < S.comp / 100, len: k ? 0.5 + rnd() * 0.12 : 0.95 + rnd() * 0.45 };
+}
+
+function step(dt){
+  const dh = dt * HOURS_PER_SEC;
+  // traffic
+  spawnAcc += dt * HOURS_PER_SEC * S.traffic / 24;
+  while (spawnAcc > 1){ spawnAcc -= 1; ships.push(spawnShip()); }
+  // whales
+  while (whales.length < S.whales) whales.push(spawnWhale());
+  if (whales.length > S.whales) whales.length = S.whales;
+  for (const w of whales){
+    if (w.gone > 0){ w.gone -= dt; if (w.gone <= 0) Object.assign(w, spawnWhale()); continue; }
+    w.h += randn() * 0.9 * dt; w.safe = Math.max(0, w.safe - dt); w.blow -= dt; if (w.blow < -0.9) w.blow = 3 + rnd() * 5;
+    const nx = w.x + Math.cos(w.h) * 1.5 * dh, ny = w.y + Math.sin(w.h) * 1.5 * dh;
+    if (nx < zone.x0 + 1 || nx > zone.x1 - 1 || ny < zone.y0 + 1 || ny > zone.y1 - 1) w.h += Math.PI * 0.6; else { w.x = nx; w.y = ny; }
+  }
+  // ships
+  for (const s of ships){
+    const target = inZone(s.x + Math.cos(s.h) * 1.2, s.y) ? zoneSpeed(s.v0, s.compliant) : s.v0;
+    s.v += (target - s.v) * Math.min(1, dt * 3.5);
+    s.x += Math.cos(s.h) * s.v * dh; s.y += Math.sin(s.h) * s.v * dh;
+    for (const w of whales){
+      if (w.gone > 0 || w.safe > 0) continue;
+      if (Math.hypot(w.x - s.x, w.y - s.y) < STRIKE_R){
+        const lethal = rnd() < pLethal(s.v, s.k);
+        count.strikes++; if (lethal) count.lethal++;
+        strikes.push({ v: s.v, lethal, j: rnd() }); if (strikes.length > 90) strikes.shift();
+        fx.push({ x: w.x, y: w.y, t: 0, lethal, v: s.v });
+        if (lethal) w.gone = DEAD_T; else w.safe = 3.5;
+        curveDirty = true;
+      }
+    }
+  }
+  const n = ships.length;
+  ships = ships.filter(s => s.x > -3 && s.x < WORLD_W + 3);
+  count.transits += n - ships.length;
+  for (const f of fx) f.t += dt; fx = fx.filter(f => f.t < 2.2);
+  if (mc.running) mcStep(dt);
+}
+
+// ---------- drawing ----------
+function skull(x, y, alpha){                            // red skull and crossbones marking a killed whale
+  const RED = '#e0494b', DARK = '#0a1218';
+  ctx.save(); ctx.translate(x, y); ctx.scale(1.15, 1.15); ctx.globalAlpha = alpha; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = RED; ctx.fillStyle = RED; ctx.lineWidth = 4.2;
+  for (const s of [1, -1]){ ctx.beginPath(); ctx.moveTo(-14 * s, -3); ctx.lineTo(14 * s, 13); ctx.stroke();
+    for (const [bx, by] of [[-14 * s, -3], [14 * s, 13]]){ ctx.beginPath(); ctx.arc(bx - 1.6 * s, by + 2.2, 2.7, 0, 6.283); ctx.arc(bx + 1.6 * s, by - 2.2, 2.7, 0, 6.283); ctx.fill(); } }
+  ctx.strokeStyle = DARK; ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.roundRect(-5.6, 2, 11.2, 9, 2.6); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, -4, 9.6, 0, 6.283); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = RED; ctx.fillRect(-4.6, 1, 9.2, 4);                       // join cranium and jaw
+  ctx.fillStyle = DARK;
+  ctx.beginPath(); ctx.ellipse(-3.8, -3.6, 2.7, 3, 0, 0, 6.283); ctx.ellipse(3.8, -3.6, 2.7, 3, 0, 0, 6.283); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(0, 0.6); ctx.lineTo(-1.5, 3.4); ctx.lineTo(1.5, 3.4); ctx.closePath(); ctx.fill();
+  ctx.lineWidth = 1.2; ctx.beginPath(); for (const tx of [-2, 0, 2]){ ctx.moveTo(tx, 6.4); ctx.lineTo(tx, 10.4); } ctx.stroke();
+  ctx.restore();
+}
+function draw(){
+  ctx.clearRect(0, 0, CW, CH);
+  const g = ctx.createLinearGradient(0, 0, CW, CH); g.addColorStop(0, '#0d2836'); g.addColorStop(1, '#091a25');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, CW, CH);
+  ctx.strokeStyle = 'rgba(255,255,255,.035)'; ctx.lineWidth = 1;
+  for (let x = 10; x < WORLD_W; x += 10){ ctx.beginPath(); ctx.moveTo(x * PX, 0); ctx.lineTo(x * PX, CH); ctx.stroke(); }
+  for (let y = 10; y < WORLD_H; y += 10){ ctx.beginPath(); ctx.moveTo(0, y * PX); ctx.lineTo(CW, y * PX); ctx.stroke(); }
+  // zone
+  const active = S.limit < NO_LIMIT;
+  const zx = zone.x0 * PX, zy = zone.y0 * PX, zw = (zone.x1 - zone.x0) * PX, zh = (zone.y1 - zone.y0) * PX;
+  ctx.beginPath(); ctx.roundRect(zx, zy, zw, zh, 26);
+  ctx.fillStyle = active ? 'rgba(57,135,229,.13)' : 'rgba(255,255,255,.03)'; ctx.fill();
+  ctx.setLineDash([10, 8]); ctx.lineWidth = 2; ctx.strokeStyle = active ? 'rgba(109,167,236,.9)' : 'rgba(195,194,183,.35)'; ctx.stroke(); ctx.setLineDash([]);
+  ctx.font = '600 17px Inter, system-ui, sans-serif'; ctx.fillStyle = active ? '#b7d3f6' : '#8d949a'; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+  if (CW < 700) ctx.font = '600 12px Inter, system-ui, sans-serif';
+  ctx.fillText(CW < 700 ? (active ? `${S.limit} kt LIMIT` : 'NO SPEED RULE') : active ? `SEASONAL SPEED ZONE  ·  ${S.limit} kt LIMIT` : 'RIGHT WHALE HABITAT  ·  NO SPEED RULE', zx + (CW < 700 ? 10 : 20), zy + zh - (CW < 700 ? 9 : 16));
+  // scale bar
+  ctx.strokeStyle = '#8d949a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(24, CH - 24); ctx.lineTo(24 + 10 * PX, CH - 24); ctx.stroke();
+  ctx.fillStyle = '#8d949a'; ctx.font = '14px Inter, system-ui, sans-serif'; ctx.fillText('10 nmi', 24, CH - 32);
+  // whales
+  for (const w of whales){
+    if (w.gone > 0){ skull(w.x * PX, w.y * PX, Math.min(1, w.gone / 1.8)); continue; }   // killed: stops, fades away
+    ctx.save(); ctx.translate(w.x * PX, w.y * PX); ctx.rotate(w.h);
+    ctx.fillStyle = '#3d5869'; ctx.strokeStyle = w.safe > 0 ? '#fab219' : '#c5d4dc'; ctx.lineWidth = w.safe > 0 ? 2.5 : 1.3; ctx.lineJoin = 'round';
+    ctx.scale(1.12, 1.12);
+    ctx.beginPath();                                    // flippers: short broad paddles, one each side
+    ctx.moveTo(8.5, -6.5); ctx.bezierCurveTo(8.5, -10.5, 6, -13.5, 2.5, -14); ctx.bezierCurveTo(1, -12, 1.5, -9.5, 2.5, -7);
+    ctx.moveTo(8.5, 6.5); ctx.bezierCurveTo(8.5, 10.5, 6, 13.5, 2.5, 14); ctx.bezierCurveTo(1, 12, 1.5, 9.5, 2.5, 7); ctx.fill(); ctx.stroke();
+    ctx.beginPath();                                    // flukes: wide span, concave trailing edge, centre notch
+    ctx.moveTo(-13, 0); ctx.bezierCurveTo(-15, -3, -17.5, -9, -21, -12.5); ctx.bezierCurveTo(-21, -7, -20, -3, -18.3, 0);
+    ctx.bezierCurveTo(-20, 3, -21, 7, -21, 12.5); ctx.bezierCurveTo(-17.5, 9, -15, 3, -13, 0); ctx.fill(); ctx.stroke();
+    ctx.beginPath();                                    // rotund body with a broad blunt head and no dorsal fin
+    ctx.moveTo(15.5, 0); ctx.bezierCurveTo(15.5, -6.2, 11.5, -8.2, 5.5, -8.2); ctx.bezierCurveTo(-3, -8.2, -9, -4.6, -14.5, -1.5); ctx.lineTo(-14.5, 1.5);
+    ctx.bezierCurveTo(-9, 4.6, -3, 8.2, 5.5, 8.2); ctx.bezierCurveTo(11.5, 8.2, 15.5, 6.2, 15.5, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#e4ebee';                          // callosities along the top of the head
+    ctx.beginPath(); ctx.ellipse(12, 0, 1.9, 2.6, 0, 0, 6.283); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(7.6, 0, 1.2, 1.7, 0, 0, 6.283); ctx.fill();
+    ctx.restore();
+    if (w.blow < 0){ const a = 1 + w.blow / 0.9; ctx.strokeStyle = `rgba(255,255,255,${0.7 * a})`; ctx.lineWidth = 2;
+      const bx = w.x * PX + Math.cos(w.h) * 6, by = w.y * PX + Math.sin(w.h) * 6, r = 5 + (1 - a) * 7;
+      ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx - r * 0.6, by - r); ctx.moveTo(bx, by); ctx.lineTo(bx + r * 0.6, by - r); ctx.stroke(); }
+  }
+  // ships
+  ctx.font = '600 13.5px Inter, system-ui, sans-serif'; ctx.textAlign = 'center';
+  for (const s of ships){
+    const x = s.x * PX, y = s.y * PX, L = 24 * s.len, Wd = 7.5 * s.len, zoneNow = inZone(s.x, s.y);
+    const slowed = active && zoneNow && s.v < s.v0 - 0.4, over = active && zoneNow && s.v > S.limit + 0.4;
+    const col = slowed ? '#6da7ec' : over ? '#ec835a' : '#e8e6df';
+    ctx.save(); ctx.translate(x, y); ctx.rotate(s.h);
+    const wk = s.v * 4.2; const wg = ctx.createLinearGradient(-L / 2, 0, -L / 2 - wk, 0);
+    wg.addColorStop(0, 'rgba(255,255,255,.34)'); wg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = wg; ctx.beginPath(); ctx.moveTo(-L / 2, -Wd / 2); ctx.lineTo(-L / 2 - wk, -Wd * 1.25); ctx.lineTo(-L / 2 - wk, Wd * 1.25); ctx.lineTo(-L / 2, Wd / 2); ctx.fill();
+    ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(L / 2, 0); ctx.lineTo(L / 4, -Wd / 2); ctx.lineTo(-L / 2, -Wd / 2); ctx.lineTo(-L / 2, Wd / 2); ctx.lineTo(L / 4, Wd / 2); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = col; ctx.fillText(s.v.toFixed(0) + ' kt', x, y - 11);
+  }
+  // strike effects
+  ctx.textAlign = 'left';
+  for (const f of fx){
+    const a = 1 - f.t / 2.2, x = f.x * PX, y = f.y * PX, c = f.lethal ? '208,59,59' : '250,178,25';
+    for (const k of [0, 0.35]){ const tt = f.t - k; if (tt < 0) continue;
+      ctx.strokeStyle = `rgba(${c},${Math.max(0, 1 - tt / 1.4)})`; ctx.lineWidth = f.lethal ? 4 : 3;
+      ctx.beginPath(); ctx.arc(x, y, 12 + tt * 34, 0, 6.283); ctx.stroke(); }
+    ctx.font = '650 15px Inter, system-ui, sans-serif';
+    const label = (f.lethal ? 'Lethal' : 'Survived') + ' · ' + f.v.toFixed(0) + ' kt', tw = ctx.measureText(label).width;
+    ctx.fillStyle = `rgba(10,18,24,${0.85 * a})`; ctx.beginPath(); ctx.roundRect(x + 16, y - 34 - f.t * 6, tw + 34, 26, 8); ctx.fill();
+    ctx.fillStyle = `rgba(${c},${a})`; ctx.beginPath(); ctx.arc(x + 29, y - 21 - f.t * 6, 5, 0, 6.283); ctx.fill();
+    ctx.fillStyle = `rgba(240,239,236,${a})`; ctx.fillText(label, x + 40, y - 16 - f.t * 6);
+  }
+}
+
+// ---------- panel ----------
+const $ = id => document.getElementById(id);
+const NS = 'http://www.w3.org/2000/svg';
+const el = (p, tag, at, txt) => { const e = document.createElementNS(NS, tag); for (const k in at) e.setAttribute(k, at[k]); if (txt != null) e.textContent = txt; p.appendChild(e); return e; };
+let curveDirty = true;
+
+function drawCurve(){
+  const svg = $('curve'); svg.innerHTML = '';
+  const L = 44, R = 566, T = 28, B = 150, X = v => L + (v / 25) * (R - L), Y = p => B - p * (B - T);
+  for (const p of [0, 0.5, 1]){ el(svg, 'line', { x1: L, x2: R, y1: Y(p), y2: Y(p), stroke: '#22303b' }); el(svg, 'text', { x: L - 8, y: Y(p) + 4, 'text-anchor': 'end' }, p * 100 + '%'); }
+  for (let v = 0; v <= 25; v += 5) el(svg, 'text', { x: X(v), y: B + 32, 'text-anchor': 'middle' }, v + (v === 25 ? ' kt' : ''));
+  const path = f => { let d = ''; for (let v = 0; v <= 25; v += 0.25) d += (v ? 'L' : 'M') + X(v).toFixed(1) + ' ' + Y(f(v)).toFixed(1); return d; };
+  const lines = S.model
+    ? [[v => pKelley(v, 0), 'Large vessel', { stroke: '#f0efec', 'stroke-width': 2.8 }],
+       [v => pKelley(v, 1), 'Small vessel (45 t)', { stroke: '#c3c2b7', 'stroke-width': 2, 'stroke-dasharray': '9 4' }],
+       [pVT, 'Speed-only model', { stroke: '#6f7c86', 'stroke-width': 1.6, 'stroke-dasharray': '2 5' }]]
+    : [[pVT, '', { stroke: '#c3c2b7', 'stroke-width': 2.5 }]];
+  lines.slice().reverse().forEach(([f, , st]) => el(svg, 'path', Object.assign({ d: path(f), fill: 'none', 'stroke-linecap': 'round' }, st)));
+  if (S.model) lines.forEach(([, name, st], i) => {      // legend in the empty lower right of the plot
+    el(svg, 'line', Object.assign({ x1: R - 178, x2: R - 146, y1: B - 62 + i * 20, y2: B - 62 + i * 20 }, st));
+    el(svg, 'text', { x: R - 138, y: B - 58 + i * 20, class: 'ink' }, name); });
+  const pc = f => Math.round(f(S.limit) * 100) + '%';
+  $('curveNote').textContent = S.limit >= NO_LIMIT ? 'no speed limit set'
+    : S.model ? `at ${S.limit} kt: ${pc(lines[0][0])} large · ${pc(lines[1][0])} small` : `at ${S.limit} kt: ${pc(pVT)} lethal`;
+  if (S.limit < NO_LIMIT){
+    el(svg, 'line', { x1: X(S.limit), x2: X(S.limit), y1: T, y2: B, stroke: '#3987e5', 'stroke-width': 2, 'stroke-dasharray': '5 4' });
+    for (const [f] of lines.slice(0, S.model ? 2 : 1)) el(svg, 'circle', { cx: X(S.limit), cy: Y(f(S.limit)), r: 6, fill: '#3987e5', stroke: '#101a22', 'stroke-width': 2 });
+  }
+  for (const s of strikes){ const y = s.lethal ? T - 8 - s.j * 8 : B + 8 + s.j * 8;   // rug: lethal on top, survived below
+    el(svg, 'line', { x1: X(s.v), x2: X(s.v), y1: y - 5, y2: y + 5, stroke: s.lethal ? '#d03b3b' : '#fab219', 'stroke-width': 2.4, opacity: .9 }); }
+  curveDirty = false;
+}
+
+function updatePanel(){
+  $('oLimit').textContent = S.limit < NO_LIMIT ? S.limit + ' kt' : 'No rule';
+  $('oComp').textContent = S.comp + '%'; $('oTraffic').textContent = S.traffic; $('oWhales').textContent = S.whales;
+  const e = expectedLethality(), ch = Math.round((e.eRule / e.eNo - 1) * 100);
+  $('heroNum').textContent = (ch < 0 ? '−' : '') + Math.abs(ch) + '%';
+  $('heroNum').style.color = ch < 0 ? '#6da7ec' : '#f0efec';
+  $('heroDetail').textContent = `A strike is lethal ${Math.round(e.eRule * 100)}% of the time now, ${Math.round(e.eNo * 100)}% with no rule`;
+}
+function updateTiles(){
+  $('tTrans').textContent = count.transits; $('tStrikes').textContent = count.strikes; $('tLethal').textContent = count.lethal;
+  $('tShare').textContent = count.strikes ? Math.round(100 * count.lethal / count.strikes) + '%' : '';
+}
+
+// ---------- Monte Carlo seasons ----------
+const mc = { running: false, done: 0, a: new Array(9).fill(0), b: new Array(9).fill(0), sa: 0, sb: 0, acc: 0 };
+function season(rule){
+  const n = rpois(3 / 840 * S.traffic * S.whales); let k = 0;
+  for (let i = 0; i < n; i++){ const v0 = sampleV0(), v = rule ? zoneSpeed(v0, rnd() < S.comp / 100) : v0, cls = rnd() < SMALL_SHARE ? 1 : 0; if (rnd() < pLethal(v, cls)) k++; }
+  return k;
+}
+function mcStart(){ mc.running = true; mc.done = 0; mc.a.fill(0); mc.b.fill(0); mc.sa = mc.sb = 0; mc.acc = 0; }
+function mcStep(dt){
+  mc.acc += dt * 1000 / 1.5; let n = Math.min(1000 - mc.done, Math.floor(mc.acc)); mc.acc -= n;
+  for (; n > 0; n--){ const a = season(false), b = season(true); mc.a[Math.min(a, 8)]++; mc.b[Math.min(b, 8)]++; mc.sa += a; mc.sb += b; mc.done++; }
+  if (mc.done >= 1000) mc.running = false;
+  drawMC();
+}
+function drawMC(){
+  const svg = $('mc'); svg.innerHTML = '';
+  const L = 44, R = 566, T = 10, B = 146, n = Math.max(1, mc.done), top = 0.6, Y = p => B - Math.min(p, top) / top * (B - T), bw = 22, slot = (R - L) / 9;
+  for (const p of [0, 0.3, 0.6]){ el(svg, 'line', { x1: L, x2: R, y1: Y(p), y2: Y(p), stroke: '#22303b' }); el(svg, 'text', { x: L - 8, y: Y(p) + 4, 'text-anchor': 'end' }, p * 100 + '%'); }
+  for (let k = 0; k < 9; k++){
+    const cx = L + slot * (k + 0.5);
+    el(svg, 'text', { x: cx, y: B + 17, 'text-anchor': 'middle' }, k < 8 ? k : '8+');
+    [[mc.a, '#d95926', 'No speed rule', -bw - 1], [mc.b, '#3987e5', 'Current settings', 1]].forEach(([arr, col, name, dx]) => {
+      const p = arr[k] / n, h = B - Y(p); if (h < 0.5) return;
+      const r = Math.min(4, h), x = cx + dx;
+      const bar = el(svg, 'path', { d: `M${x} ${B}V${B - h + r}q0 ${-r} ${r} ${-r}h${bw - 2 * r}q${r} 0 ${r} ${r}V${B}z`, fill: col });
+      el(bar, 'title', {}, `${name}: ${k < 8 ? k : '8 or more'} lethal strikes in ${Math.round(p * 100)}% of seasons`);
+    });
+  }
+  el(svg, 'text', { x: R, y: B + 34, 'text-anchor': 'end' }, 'lethal strikes in a season (share of ' + (mc.done || '1,000').toLocaleString() + ' seasons)');
+  $('mA').textContent = mc.done ? '· mean ' + (mc.sa / mc.done).toFixed(1) : '';
+  $('mB').textContent = mc.done ? '· mean ' + (mc.sb / mc.done).toFixed(1) : '';
+}
+
+// ---------- wiring ----------
+function setControl(id, v){
+  S[id] = +v;
+  if (id === 'model') document.querySelectorAll('#model button').forEach(b => b.classList.toggle('on', +b.dataset.m === S.model)); else $(id).value = v;
+  count = { transits: 0, strikes: 0, lethal: 0 }; strikes = [];
+  if (id === 'comp') for (const s of ships) s.compliant = rnd() < S.comp / 100;
+  mc.running = false; mc.done = 0; mc.a.fill(0); mc.b.fill(0); mc.sa = mc.sb = 0; drawMC();   // earlier seasons no longer match the settings
+  updatePanel(); curveDirty = true;
+}
+for (const id of ['limit', 'comp', 'traffic', 'whales']) $(id).addEventListener('input', e => setControl(id, e.target.value));
+document.querySelectorAll('#model button').forEach(b => b.addEventListener('click', () => setControl('model', b.dataset.m)));
+$('mcBtn').addEventListener('click', mcStart);
+
+function frame(dt){ step(dt); draw(); updateTiles(); if (curveDirty) drawCurve(); }
+resize(); window.addEventListener('resize', resize);
+for (let i = 0; i < 400; i++) step(1 / 30);                       // pre-warm so the map starts populated
+count = { transits: 0, strikes: 0, lethal: 0 }; strikes = []; fx = [];
+updatePanel(); drawCurve(); drawMC(); draw(); updateTiles();
+
+const CAPTURE = new URLSearchParams(location.search).has('capture');
+window.__sim = { frame, setControl, mcStart, S, mc, count };
+if (!CAPTURE){ let last = performance.now();
+  (function loop(now){ const dt = Math.min(0.05, (now - last) / 1000); last = now; frame(dt); requestAnimationFrame(loop); })(last); }
+</script>
+</body>
+</html>
